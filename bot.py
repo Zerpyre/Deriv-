@@ -5,6 +5,11 @@ import time
 import datetime
 import certifi
 from datetime import datetime
+from Indicadores.fibonacci import fibonacci_levels
+from Indicadores.rsi import calculate_rsi
+from Indicadores.macd import calculate_macd
+from eventos.Rise import execute_rise_trade
+from eventos.Fall import execute_fall_trade
 
 # Variables globales
 app_id = 'Your_id'
@@ -143,91 +148,8 @@ def process_ticks(ws):
 
         analyze_market(ws)
 
-
-
-# Función para calcular el RSI
-def calculate_rsi(prices, period=14):
-    deltas = np.diff(prices)
-    gains = np.where(deltas > 0, deltas, 0)
-    losses = np.where(deltas < 0, -deltas, 0)
-
-    # Inicializa las primeras ganancias y pérdidas promedio
-    avg_gain = np.mean(gains[:period])
-    avg_loss = np.mean(losses[:period])
-
-    rsi = [100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100]
-
-    # Iterar sobre los precios restantes para calcular el RSI acumulativo
-    for i in range(period, len(prices) - 1):
-        current_gain = gains[i]
-        current_loss = losses[i]
-
-        # Actualizar la ganancia y pérdida promedio
-        avg_gain = (avg_gain * (period - 1) + current_gain) / period
-        avg_loss = (avg_loss * (period - 1) + current_loss) / period
-
-        # Evitar divisiones por cero y calcular el RSI
-        rs = avg_gain / avg_loss if avg_loss != 0 else 0
-        rsi_value = 100 - (100 / (1 + rs))
-        rsi.append(rsi_value)
-
-    return rsi[-1]  # Devuelve el último valor del RSI
-
-
-
-# Función para calcular MACD
-def calculate_macd(prices, short_period=12, long_period=26, signal_period=9):
-    # Calcular las EMAs de corto y largo plazo
-    short_ema = calculate_ema(prices, short_period)
-    long_ema = calculate_ema(prices, long_period)
-
-    # Asegurarse de que ambas EMAs tengan la misma longitud
-    min_length = min(len(short_ema), len(long_ema))
-    short_ema = short_ema[-min_length:]  # Cortar para que tenga la misma longitud
-    long_ema = long_ema[-min_length:]
-
-    # Calcular la línea MACD
-    macd_line = short_ema - long_ema
-
-    # Calcular la signal line usando el EMA de la línea MACD
-    signal_line = calculate_ema(macd_line, signal_period)
-
-    return macd_line, signal_line
-
-def calculate_ema(prices, period):
-
-    if len(prices) < period:
-        return np.nan  # No se puede calcular EMA si no hay suficientes datos
-
-    multiplier = 2 / (period + 1)
-    ema = [np.mean(prices[:period])]  # Usar el promedio simple como el primer valor de la EMA
-
-    for price in prices[period:]:
-        ema.append((price - ema[-1]) * multiplier + ema[-1])
-
-    return np.array(ema)
-
-def fibonacci_levels(min_price, max_price):
-    return {
-        "30.0%": max_price - (max_price - min_price) * 0.3,
-        "40.0%": max_price - (max_price - min_price) * 0.4,
-        "50%": (max_price + min_price) / 2,
-        "60.0%": max_price - (max_price - min_price) * 0.6,
-        "70.0%": min_price - (max_price - min_price) * 0.7
-    }
-
-def is_bullish_pattern(current_candle, previous_candle):
-    # Ejemplo: Verificar si la vela actual es un Pin Bar alcista
-    return (current_candle['close'] > current_candle['open'] and
-            current_candle['close'] > previous_candle['high'])
-
-def is_bearish_pattern(current_candle, previous_candle):
-    # Ejemplo: Verificar si la vela actual es un Pin Bar bajista
-    return (current_candle['close'] < current_candle['open'] and
-            current_candle['close'] < previous_candle['low'])
-
 def analyze_market(ws):
-    global candles, contract_open, amount, loses, support, resistance, last_update_time
+    global candles, contract_open, amount, loses, support, resistance, last_update_time , symbol
 
     print("Analizando velas...")
 
@@ -265,48 +187,14 @@ def analyze_market(ws):
 
     if fibonacci["40.0%"] <= current_price <= fibonacci["50%"] and is_bullish and not contract_open:
         print(f"Cerca del nivel de Fibonacci entre 40% y 50% en tendencia alcista. Ejecutando operación Rise.")
-        execute_rise_trade(ws, amount)
+        execute_rise_trade(ws, amount , symbol)
 
     
     elif fibonacci["60.0%"] <= current_price <= fibonacci["70.0%"] and is_bearish and not contract_open:
         print(f"Cerca del nivel de Fibonacci entre 60% y 70% en tendencia bajista. Ejecutando operación Fall.")
-        execute_fall_trade(ws, amount)
+        execute_fall_trade(ws, amount , symbol)
 
-def execute_rise_trade(ws,amount):
-    rise_trade_message = {
-        "buy": 1,
-        "subscribe": 1,
-        "price": 20,
-        "parameters": {
-            "amount": amount,
-            "basis": "stake",
-            "contract_type": "CALL",
-            "currency": "USD",
-            "duration": 2,
-            "duration_unit": "m",
-            "symbol": symbol
-        }
-    }
-    ws.send(json.dumps(rise_trade_message))
-    print("Operación Rise enviada. Esperando confirmación...")
 
-def execute_fall_trade(ws,amount):
-    fall_trade_message = {
-        "buy": 1,
-        "subscribe": 1,
-        "price": 20,
-        "parameters": {
-            "amount": amount,
-            "basis": "stake",
-            "contract_type": "PUT",
-            "currency": "USD",
-            "duration": 2,
-            "duration_unit": "m",
-            "symbol": symbol
-        }
-    }
-    ws.send(json.dumps(fall_trade_message))
-    print("Operación Fall enviada. Esperando confirmación...")
 
 def subscribe_to_contract(ws, contract_id):
     contract_message = {
