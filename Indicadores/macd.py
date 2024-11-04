@@ -1,4 +1,5 @@
 # Función para calcular MACD
+from .ema import calculate_ema
 def calculate_macd(prices, short_period=12, long_period=26, signal_period=9):
     # Calcular las EMAs de corto y largo plazo
     short_ema = calculate_ema(prices, short_period)
